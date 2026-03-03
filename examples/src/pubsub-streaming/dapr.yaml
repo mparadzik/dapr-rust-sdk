@@ -1,0 +1,13 @@
+version: 1
+common:
+  resourcesPath: ./resources/
+  daprdLogDestination: console
+apps:
+  - appID: rust-streaming-subscriber
+    appDirPath: ./
+    logLevel: debug
+    command: ["cargo", "run", "--example", "pubsub-streaming-subscriber"]
+  - appID: rust-streaming-publisher
+    appDirPath: ./
+    logLevel: debug
+    command: ["cargo", "run", "--example", "pubsub-streaming-publisher"]

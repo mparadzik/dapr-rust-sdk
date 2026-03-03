@@ -87,6 +87,14 @@ name = "pubsub-subscriber"
 path = "src/pubsub/subscriber.rs"
 
 [[example]]
+name = "pubsub-streaming-publisher"
+path = "src/pubsub-streaming/publisher.rs"
+
+[[example]]
+name = "pubsub-streaming-subscriber"
+path = "src/pubsub-streaming/subscriber.rs"
+
+[[example]]
 name = "query-state-1"
 path = "src/query_state/query1.rs"
 
