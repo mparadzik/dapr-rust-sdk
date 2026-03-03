@@ -12,6 +12,7 @@ use std::time::Duration;
 use tokio::io::AsyncRead;
 use tonic::codegen::tokio_stream;
 use tonic::{transport::Channel as TonicChannel, Request};
+use tokio::sync::mpsc;
 use tonic::{Status, Streaming};
 
 #[derive(Clone)]
@@ -608,6 +609,48 @@ impl<T: DaprInterface> Client<T> {
     ) -> Result<ConversationResponse, Error> {
         self.0.converse_alpha1(request).await
     }
+
+    /// Subscribe to a PubSub topic and receive topic events.
+    ///
+    /// This is a bidirectional streaming RPC. The method returns a sender channel
+    /// for sending acknowledgments and a streaming receiver for receiving events.
+    ///
+    /// # Arguments
+    ///
+    /// * `pubsub_name` - Name of the pubsub component
+    /// * `topic` - Topic to subscribe to
+    /// * `metadata` - Optional metadata for the subscription
+    /// * `dead_letter_topic` - Optional dead letter topic for failed messages
+    ///
+    /// # Returns
+    ///
+    /// A tuple containing:
+    /// * A sender channel for sending processed event acknowledgments
+    /// * A streaming receiver for receiving topic events
+    pub async fn subscribe_topic_events_alpha1<S>(
+        &mut self,
+        pubsub_name: S,
+        topic: S,
+        metadata: Option<HashMap<String, String>>,
+        dead_letter_topic: Option<S>,
+    ) -> Result<
+        (
+            mpsc::Sender<SubscribeTopicEventsRequestProcessedAlpha1>,
+            Streaming<SubscribeTopicEventsResponseAlpha1>,
+        ),
+        Error,
+    >
+    where
+        S: Into<String>,
+    {
+        let initial_request = SubscribeTopicEventsRequestInitialAlpha1 {
+            pubsub_name: pubsub_name.into(),
+            topic: topic.into(),
+            metadata: metadata.unwrap_or_default(),
+            dead_letter_topic: dead_letter_topic.map(|s| s.into()),
+        };
+        self.0.subscribe_topic_events_alpha1(initial_request).await
+    }
 }
 
 #[async_trait]
@@ -675,6 +718,17 @@ pub trait DaprInterface: Sized {
         &mut self,
         request: ConversationRequest,
     ) -> Result<ConversationResponse, Error>;
+
+    async fn subscribe_topic_events_alpha1(
+        &mut self,
+        initial_request: SubscribeTopicEventsRequestInitialAlpha1,
+    ) -> Result<
+        (
+            mpsc::Sender<SubscribeTopicEventsRequestProcessedAlpha1>,
+            Streaming<SubscribeTopicEventsResponseAlpha1>,
+        ),
+        Error,
+    >;
 }
 
 #[async_trait]
@@ -879,6 +933,62 @@ impl DaprInterface for dapr_v1::dapr_client::DaprClient<TonicChannel> {
             .await?
             .into_inner())
     }
+
+    async fn subscribe_topic_events_alpha1(
+        &mut self,
+        initial_request: SubscribeTopicEventsRequestInitialAlpha1,
+    ) -> Result<
+        (
+            mpsc::Sender<SubscribeTopicEventsRequestProcessedAlpha1>,
+            Streaming<SubscribeTopicEventsResponseAlpha1>,
+        ),
+        Error,
+    > {
+        // Create a channel for sending requests (initial + acknowledgments)
+        let (tx, rx) = mpsc::channel::<SubscribeTopicEventsRequestAlpha1>(128);
+
+        // Create a channel for the user to send acknowledgments
+        let (ack_tx, mut ack_rx) =
+            mpsc::channel::<SubscribeTopicEventsRequestProcessedAlpha1>(128);
+
+        // Send the initial request
+        let initial = SubscribeTopicEventsRequestAlpha1 {
+            subscribe_topic_events_request_type: Some(
+                subscribe_topic_events_request_alpha1::SubscribeTopicEventsRequestType::InitialRequest(
+                    initial_request,
+                ),
+            ),
+        };
+        tx.send(initial)
+            .await
+            .map_err(|_| Error::ChannelSendError)?;
+
+        // Spawn a task to forward acknowledgments to the request stream
+        tokio::spawn(async move {
+            while let Some(processed) = ack_rx.recv().await {
+                let request = SubscribeTopicEventsRequestAlpha1 {
+                    subscribe_topic_events_request_type: Some(
+                        subscribe_topic_events_request_alpha1::SubscribeTopicEventsRequestType::EventProcessed(
+                            processed,
+                        ),
+                    ),
+                };
+                if tx.send(request).await.is_err() {
+                    break;
+                }
+            }
+        });
+
+        // Create a stream from the receiver
+        let request_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+
+        // Call the gRPC method
+        let response = self
+            .subscribe_topic_events_alpha1(Request::new(request_stream))
+            .await?;
+
+        Ok((ack_tx, response.into_inner()))
+    }
 }
 
 /// A request from invoking a service
@@ -1020,6 +1130,41 @@ pub type ConversationResult = crate::dapr::proto::runtime::v1::ConversationResul
 
 /// An input to the conversation
 pub type ConversationInput = crate::dapr::proto::runtime::v1::ConversationInput;
+
+/// A request for subscribing to topic events (wrapper type)
+pub type SubscribeTopicEventsRequestAlpha1 =
+    crate::dapr::proto::runtime::v1::SubscribeTopicEventsRequestAlpha1;
+
+/// Initial request for subscribing to topic events
+pub type SubscribeTopicEventsRequestInitialAlpha1 =
+    crate::dapr::proto::runtime::v1::SubscribeTopicEventsRequestInitialAlpha1;
+
+/// Acknowledgment request for processed topic events
+pub type SubscribeTopicEventsRequestProcessedAlpha1 =
+    crate::dapr::proto::runtime::v1::SubscribeTopicEventsRequestProcessedAlpha1;
+
+/// A response from subscribing to topic events
+pub type SubscribeTopicEventsResponseAlpha1 =
+    crate::dapr::proto::runtime::v1::SubscribeTopicEventsResponseAlpha1;
+
+/// Initial response from subscribing to topic events
+pub type SubscribeTopicEventsResponseInitialAlpha1 =
+    crate::dapr::proto::runtime::v1::SubscribeTopicEventsResponseInitialAlpha1;
+
+/// Topic event request (the actual event received)
+pub type TopicEventRequest = crate::dapr::proto::runtime::v1::TopicEventRequest;
+
+/// Topic event response (for acknowledgments)
+pub type TopicEventResponse = crate::dapr::proto::runtime::v1::TopicEventResponse;
+
+/// Module containing the oneof type for subscribe topic events requests
+pub use crate::dapr::proto::runtime::v1::subscribe_topic_events_request_alpha1;
+
+/// Module containing the oneof type for subscribe topic events responses
+pub use crate::dapr::proto::runtime::v1::subscribe_topic_events_response_alpha1;
+
+/// Module containing the topic event response status enum
+pub use crate::dapr::proto::runtime::v1::topic_event_response;
 
 type StreamPayload = crate::dapr::proto::common::v1::StreamPayload;
 impl<K> From<(K, Vec<u8>)> for common_v1::StateItem

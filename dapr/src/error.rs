@@ -9,6 +9,7 @@ pub enum Error {
     ParseIntError,
     VarError,
     SerializationError,
+    ChannelSendError,
 }
 
 impl Display for Error {
