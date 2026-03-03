@@ -27,6 +27,14 @@ name = "actors-client"
 path = "src/actors/client.rs"
 
 [[example]]
+name = "actors-grpc-client"
+path = "src/actors-grpc/client.rs"
+
+[[example]]
+name = "actors-grpc-server"
+path = "src/actors-grpc/server.rs"
+
+[[example]]
 name = "actors-server"
 path = "src/actors/server.rs"
 

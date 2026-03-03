@@ -187,7 +187,14 @@ impl DaprHttpServer {
         self.build_router().await
     }
 
-    async fn build_router(&mut self) -> Router {
+    /// Builds the axum [`Router`] with all registered actor routes.
+    ///
+    /// This is useful when you want to compose the actor routes with other
+    /// services (e.g. a gRPC service via tonic) on the same port.
+    ///
+    /// **Note:** This method can only be called once per server instance, as
+    /// method registrations are drained internally during router construction.
+    pub async fn build_router(&mut self) -> Router {
         let rt = self.actor_runtime.clone();
 
         let app = Router::new()

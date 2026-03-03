@@ -1,0 +1,16 @@
+version: 1
+common:
+  resourcesPath: ./resources/
+  daprdLogDestination: console
+apps:
+  - appID: actors-grpc-server
+    appDirPath: ./
+    appProtocol: h2c
+    appPort: 50051
+    logLevel: debug
+    command: ["cargo", "run", "--example", "actors-grpc-server"]
+  - appID: actors-grpc-client
+    appDirPath: ./
+    daprGRPCPort: 3502
+    logLevel: debug
+    command: ["cargo", "run", "--example", "actors-grpc-client"]
