@@ -1,19 +1,14 @@
 [workspace]
-members = [
-    "dapr",
-    "dapr-macros",
-    "proto-gen",
-    "examples",
-]
+members = ["dapr", "dapr-macros", "proto-gen", "examples"]
 exclude = [
-    ".github/workflows/dapr-bot" # Bot used in GitHub workflow
+    ".github/workflows/dapr-bot", # Bot used in GitHub workflow
 ]
 resolver = "2"
 
 [workspace.dependencies]
 async-trait = "0.1"
-prost = "0.13.4"
-prost-types = "0.13.4"
+prost = "0.14.2"
+prost-types = "0.14.2"
 
 serde = "1.0"
 serde_json = "1.0"
@@ -22,8 +17,10 @@ tokio = "1.39"
 tokio-stream = "0.1"
 tokio-util = "0.7"
 
-tonic = "0.12.3"
-tonic-build = "0.12.3"
+tonic = "0.14.2"
+tonic-build = "0.14.2"
+tonic-prost = "0.14.2"
+tonic-prost-build = "0.14.2"
 
 [patch.crates-io]
 # Pinning getrandom to 0.3.x to maintain compatibility with MSRV 1.78.0, as getrandom 0.4.x requires Rust 1.85.0 or later
